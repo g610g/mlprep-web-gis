@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\GeoServer;
+use App\Http\Controllers\UploadShapeFileToGeoserver;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -81,7 +82,14 @@ Route::prefix('geoserver')->group(function () {
         return response($sld, 200, ['Content-Type' => 'application/xml']);
     });
     
+    // Post uploaded shape file
+    Route::post('/upload', [UploadShapeFileToGeoserver::class, 'uploadShapeFile']);
+
+
+
 });
+
+
 
 
 require __DIR__.'/settings.php';

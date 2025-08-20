@@ -89,3 +89,9 @@
     @apply bg-background text-foreground;
   }
 } */
+
+hr {
+  border: none; /* Removes the default 3D border effect */
+  height: 1px; /* Sets the thickness of the line */
+  background-color: #808080; /* Sets the color of the line to red */
+}
