@@ -23,7 +23,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('dashboard');
 });
 
-
 Route::prefix('geoserver')->group(function () {
     
     // Get all layers
@@ -40,6 +39,34 @@ Route::prefix('geoserver')->group(function () {
         return response()->json($layerInfo);
     });
     
+    // Delete specific layer
+    Route::delete('/layers/{layer}', function ($layer) {
+        $geoServer = new GeoServer();
+        $result = $geoServer->deleteLayer($layer);
+        
+        return response()->json($result, $result['http_code']);
+    });
+    
+    // Delete multiple layers
+    Route::delete('/layers', function () {
+        $layers = request()->input('layers', []);
+        
+        if (empty($layers)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No layers specified for deletion'
+            ], 400);
+        }
+        
+        $geoServer = new GeoServer();
+        $results = $geoServer->deleteLayers($layers);
+        
+        return response()->json([
+            'success' => true,
+            'results' => $results
+        ]);
+    });
+    
     // Get all workspaces
     Route::get('/workspaces', function () {
         $geoServer = new GeoServer();
@@ -52,6 +79,15 @@ Route::prefix('geoserver')->group(function () {
         $geoServer = new GeoServer();
         $workspaceInfo = $geoServer->getWorkspace($workspace, 'array');
         return response()->json($workspaceInfo);
+    });
+    
+    // Delete specific workspace
+    Route::delete('/workspaces/{workspace}', function ($workspace) {
+        $recurse = request()->input('recurse', true);
+        $geoServer = new GeoServer();
+        $result = $geoServer->deleteWorkspace($workspace, $recurse);
+        
+        return response()->json($result, $result['http_code']);
     });
     
     // Get WFS capabilities
@@ -84,13 +120,7 @@ Route::prefix('geoserver')->group(function () {
     
     // Post uploaded shape file
     Route::post('/upload', [UploadShapeFileToGeoserver::class, 'uploadShapeFile']);
-
-
-
 });
-
-
-
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

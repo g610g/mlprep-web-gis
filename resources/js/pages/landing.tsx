@@ -168,7 +168,7 @@ export default function HomePage() {
                             </Avatar>
                             <span className="font-heading text-lg font-bold text-slate-900">ML-Prep</span>
                         </div>
-                        <div className="text-slate-600">© 2024 ML-Prep. Elevating spatial data analysis worldwide.</div>
+                        <div className="text-slate-600">© 2025 ML-Prep. Elevating spatial data analysis worldwide.</div>
                     </div>
                 </div>
             </footer>

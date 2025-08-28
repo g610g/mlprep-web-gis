@@ -9,7 +9,7 @@ import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
 
 interface FloatingDockProps {
-    onLayersClick: () => void;
+    setPropsLayers: React.Dispatch<React.SetStateAction<LayerData[]>>;
 }
 
 interface Layer {
@@ -30,22 +30,81 @@ const dockItems = [
     { icon: Settings, label: 'Settings', href: '/settings', color: 'hover:text-slate-600', type: 'link' as const },
 ];
 
-export function FloatingDock() {
+export function FloatingDock({ setPropsLayers }) {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [isSheetOpen, setIsSheetOpen] = useState(false);
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [layers, setLayers] = useState<Layer[]>([]);
     const [geoLayers, setGeoLayers] = useState<any[]>([]);
     const [fetchedLayers, setFetchedLayers] = useState<any[]>([]);
     const [uploadShape, setUploadShape] = useState(null);
     const [uploadLoading, setUploadLoading] = useState(false);
 
+    // New state to track active layers (layers currently in Layer Controls)
+    const [activeLayers, setActiveLayers] = useState<Layer[]>([]);
+
     const toggleLayerVisibility = (layerId: string) => {
-        setLayers(layers.map((layer) => (layer.id === layerId ? { ...layer, visible: !layer.visible } : layer)));
+        const updated = activeLayers.map((layer) => (layer.id === layerId ? { ...layer, visible: !layer.visible } : layer));
+        setActiveLayers(updated);
+        setPropsLayers(updated);
     };
 
     const updateLayerOpacity = (layerId: string, value: number[]) => {
-        setLayers(layers.map((layer) => (layer.id === layerId ? { ...layer, opacity: value[0] } : layer)));
+        setActiveLayers(activeLayers.map((layer) => (layer.id === layerId ? { ...layer, opacity: value[0] } : layer)));
     };
+
+    // Function to add a layer from available layers to active layers
+    const addLayerToActive = (layerToAdd: Layer) => {
+        const newActiveLayer = { ...layerToAdd, visible: true };
+        const updatedActiveLayers = [...activeLayers, newActiveLayer];
+        setActiveLayers(updatedActiveLayers);
+        setPropsLayers(updatedActiveLayers);
+    };
+
+    // Function to remove a layer from active layers
+    const removeLayerFromActive = (layerId: string) => {
+        const updatedActiveLayers = activeLayers.filter((layer) => layer.id !== layerId);
+        setActiveLayers(updatedActiveLayers);
+        setPropsLayers(updatedActiveLayers);
+    };
+
+    // Function to permanently delete a layer from GeoServer
+    const deleteLayerFromGeoServer = async (layerName: string) => {
+        if (!confirm(`Are you sure you want to permanently delete the layer "${layerName}"? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            const response = await axios.delete(`http://127.0.0.1:8000/geoserver/layers/${layerName}`);
+
+            if (response.data.success && response.status === 200) {
+                alert('Layer deleted successfully!');
+
+                // Refresh the layers after successful deletion (same as upload)
+                fetchGeoserverLayers();
+            } else {
+                alert(`Failed to delete layer: ${response.data.message || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error deleting layer:', error);
+
+            if (error.response?.data?.message) {
+                alert(`Delete failed: ${error.response.data.message}`);
+            } else if (error.response?.status === 404) {
+                alert('Layer not found on GeoServer');
+            } else if (error.response?.status === 403) {
+                alert('Permission denied. You may not have rights to delete this layer.');
+            } else if (error.response?.status === 405) {
+                alert('Delete method not allowed. Please check your server configuration.');
+            } else {
+                alert('Failed to delete layer. Please try again.');
+            }
+        }
+    };
+
+    // Filter layers to show only those not already in active layers
+    const availableLayers = layers.filter((layer) => !activeLayers.some((activeLayer) => activeLayer.id === layer.id));
+
     useEffect(() => {
         fetchGeoserverLayers();
     }, []);
@@ -55,10 +114,10 @@ export function FloatingDock() {
             const detailResults = await Promise.all(
                 geoLayers.map(async (layer: any) => {
                     const res = await axios.get(`http://127.0.0.1:8000/geoserver/layers/${layer.name}`);
-                    return res.data; // {layer: {...}}
+                    return res.data;
                 }),
             );
-            // Normalize each layer entry to your interface
+
             const normalizedLayers: Layer[] = detailResults.map((item: any) => {
                 const l = item.layer;
                 return {
@@ -68,8 +127,8 @@ export function FloatingDock() {
                     visible: false,
                 };
             });
-            setFetchedLayers(detailResults); // optional: raw data
-            setLayers(normalizedLayers); // usable by UI
+            setFetchedLayers(detailResults);
+            setLayers(normalizedLayers);
         };
 
         if (geoLayers.length > 0) {
@@ -99,15 +158,16 @@ export function FloatingDock() {
         console.log('Layers Rendered!');
         try {
             const response = await axios.get('http://127.0.0.1:8000/geoserver/layers');
-            const allLayers = response.data.layers.layer; // or wherever your array is
-            // Filter by workspace prefix
+            const allLayers = response.data.layers.layer;
             const mlprepLayers = allLayers.filter((item: any) => item.name.startsWith('mlprep:'));
             console.log('Filtered:', mlprepLayers);
             setGeoLayers(mlprepLayers);
+            console.log(fetchedLayers);
+            setPropsLayers(mlprepLayers);
             return mlprepLayers;
         } catch (error) {
             console.error('Error fetching Geoserver Layers:', error);
-            throw error; // optional: rethrow if you want caller to handle it
+            throw error;
         }
     };
 
@@ -116,23 +176,39 @@ export function FloatingDock() {
         const file = uploadShape;
         if (!file) {
             alert('Please Select a Zip File');
+            return;
         }
+
         setUploadLoading(true);
         console.log(file);
+
         const formData = new FormData();
         formData.append('zipfile', file);
 
         try {
-            const response = await axios.post('http://127.0.0.1:8000/geoserver/upload', formData, {
+            const response = await axios.post('/geoserver/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
                 },
             });
-            console.log(response);
+
+            console.log('Upload successful:', response.data);
+
+            if (response.data.success) {
+                alert('Shapefile uploaded successfully!');
+            }
         } catch (error) {
-            console.error('Upload failed', error);
+            console.error('Upload failed:', error);
+
+            if (error.response?.data?.message) {
+                alert(`Upload failed: ${error.response.data.message}`);
+            } else {
+                alert('Upload failed. Please try again.');
+            }
         } finally {
             setUploadLoading(false);
+            fetchGeoserverLayers();
         }
     };
 
@@ -175,7 +251,6 @@ export function FloatingDock() {
                                             />
                                         </div>
 
-                                        {/* Tooltip */}
                                         <div
                                             className={`pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded-md bg-slate-900 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100`}
                                         >
@@ -197,8 +272,11 @@ export function FloatingDock() {
                                         </SheetTitle>
                                     </SheetHeader>
                                     <div className="">
-                                        <Dialog>
-                                            <DialogTrigger className="mx-4 size-8 w-90 rounded-sm bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700">
+                                        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                            <DialogTrigger
+                                                className="mx-4 size-8 w-90 rounded-sm bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700"
+                                                onClick={() => setIsDialogOpen(true)}
+                                            >
                                                 Add Layer
                                             </DialogTrigger>
                                             <DialogContent className="z-[2000] w-[450px] rounded-lg bg-white p-6">
@@ -214,35 +292,53 @@ export function FloatingDock() {
                                                         <TabsTrigger value="upload">Upload</TabsTrigger>
                                                     </TabsList>
                                                     <TabsContent value="available">
-                                                        {layers.map((layer) => (
-                                                            <div
-                                                                key={layer.id}
-                                                                className={`rounded-lg border p-3 transition-all ${
-                                                                    layer.visible ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'
-                                                                }`}
-                                                            >
-                                                                <div className="mb-2 flex items-center justify-between">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="max-w-[150px] truncate whitespace-nowrap" title={layer.name}>
-                                                                            {layer.name}
+                                                        {availableLayers.length === 0 ? (
+                                                            <div className="py-4 text-center text-gray-500">
+                                                                {layers.length === 0 ? 'No layers available' : 'All layers are already added'}
+                                                            </div>
+                                                        ) : (
+                                                            availableLayers.map((layer) => (
+                                                                <div
+                                                                    key={layer.id}
+                                                                    className="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-3 transition-all hover:border-emerald-200 hover:bg-emerald-50"
+                                                                >
+                                                                    <div className="mb-2 flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div
+                                                                                className="max-w-[150px] truncate whitespace-nowrap"
+                                                                                title={layer.name}
+                                                                            >
+                                                                                {layer.name}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Badge className={`text-xs ${getLayerTypeColor(layer.type)}`}>
+                                                                                {layer.type}
+                                                                            </Badge>
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                className="h-auto p-1 text-green-400 hover:bg-green-600 hover:text-white"
+                                                                                onClick={() => addLayerToActive(layer)}
+                                                                                title="Add layer to controls"
+                                                                            >
+                                                                                <Plus className="h-3 w-3" />
+                                                                            </Button>
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                className="h-auto p-1 text-red-500 hover:bg-red-500 hover:text-white"
+                                                                                onClick={() => deleteLayerFromGeoServer(layer.name)}
+                                                                                title="Delete layer permanently from GeoServer"
+                                                                            >
+                                                                                <Trash2 className="h-3 w-3" />
+                                                                            </Button>
                                                                         </div>
                                                                     </div>
-
-                                                                    <div className="flex items-center gap-1">
-                                                                        <Badge className={`text-xs ${getLayerTypeColor(layer.type)}`}>
-                                                                            {layer.type}
-                                                                        </Badge>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            className="h-auto p-1 text-green-400 hover:bg-green-600 hover:text-white"
-                                                                        >
-                                                                            <Plus className="h-3 w-3" />
-                                                                        </Button>
-                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ))}
+                                                            ))
+                                                        )}
                                                     </TabsContent>
                                                     <TabsContent value="upload">
                                                         <form className="mt-2 flex items-center gap-2" onSubmit={uploadShapeFile}>
@@ -264,48 +360,54 @@ export function FloatingDock() {
 
                                         <hr className="my-5"></hr>
 
-                                        {layers.map((layer) => (
-                                            <div
-                                                key={layer.id}
-                                                className={`rounded-lg border p-3 transition-all ${
-                                                    layer.visible ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'
-                                                }`}
-                                            >
-                                                <div className="mb-2 flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-auto p-1"
-                                                            onClick={() => toggleLayerVisibility(layer.id)}
-                                                        >
-                                                            {layer.visible ? (
-                                                                <Eye className="h-4 w-4 text-emerald-600" />
-                                                            ) : (
-                                                                <EyeOff className="h-4 w-4 text-gray-400" />
-                                                            )}
-                                                        </Button>
-                                                        <div className="max-w-[150px] truncate whitespace-nowrap" title={layer.name}>
-                                                            {layer.name}
+                                        {activeLayers.length === 0 ? (
+                                            <div className="py-4 text-center text-gray-500">No active layers</div>
+                                        ) : (
+                                            activeLayers.map((layer) => (
+                                                <div
+                                                    key={layer.id}
+                                                    className={`mb-2 rounded-lg border p-3 transition-all ${
+                                                        layer.visible ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'
+                                                    }`}
+                                                >
+                                                    <div className="mb-2 flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-auto p-1"
+                                                                onClick={() => toggleLayerVisibility(layer.id)}
+                                                            >
+                                                                {layer.visible ? (
+                                                                    <Eye className="h-4 w-4 text-emerald-600" />
+                                                                ) : (
+                                                                    <EyeOff className="h-4 w-4 text-gray-400" />
+                                                                )}
+                                                            </Button>
+                                                            <div className="max-w-[150px] truncate whitespace-nowrap" title={layer.name}>
+                                                                {layer.name}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-1">
+                                                            <Badge className={`text-xs ${getLayerTypeColor(layer.type)}`}>{layer.type}</Badge>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-auto p-1 text-red-500 hover:bg-red-500 hover:text-white"
+                                                                onClick={() => removeLayerFromActive(layer.id)}
+                                                                title="Remove layer from controls"
+                                                            >
+                                                                <Trash2 className="h-3 w-3" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="sm" className="h-auto p-1">
+                                                                <AlignJustify className="h-3 w-3" />
+                                                            </Button>
                                                         </div>
                                                     </div>
-
-                                                    <div className="flex items-center gap-1">
-                                                        <Badge className={`text-xs ${getLayerTypeColor(layer.type)}`}>{layer.type}</Badge>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="h-auto p-1 text-red-500 hover:bg-red-500 hover:text-white"
-                                                        >
-                                                            <Trash2 className="h-3 w-3" />
-                                                        </Button>
-                                                        <Button variant="ghost" size="sm" className="h-auto p-1">
-                                                            <AlignJustify className="h-3 w-3" />
-                                                        </Button>
-                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))
+                                        )}
                                     </div>
                                 </SheetContent>
                             </Sheet>
@@ -334,7 +436,6 @@ export function FloatingDock() {
                                 />
                             </div>
 
-                            {/* Tooltip */}
                             <div
                                 className={`pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded-md bg-slate-900 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100`}
                             >
