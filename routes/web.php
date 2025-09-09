@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\GeoServer;
 use App\Http\Controllers\UploadShapeFileToGeoserver;
+use App\Http\Controllers\DataController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -22,6 +23,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
 });
+
+Route::post('/map/add-data', [DataController::class, 'store']);
 
 Route::prefix('geoserver')->group(function () {
     

@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -21,9 +22,11 @@ import {
     User,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { MdFileDownload } from 'react-icons/md';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from './ui/form';
+import { Input } from './ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
 
 interface FloatingDockProps {
@@ -100,12 +103,20 @@ const invoices = [
 export function FloatingDock({ setPropsLayers }) {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [isSheetOpen, setIsSheetOpen] = useState(false);
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [layers, setLayers] = useState<Layer[]>([]);
     const [geoLayers, setGeoLayers] = useState<any[]>([]);
     const [fetchedLayers, setFetchedLayers] = useState<any[]>([]);
     const [uploadShape, setUploadShape] = useState(null);
     const [uploadLoading, setUploadLoading] = useState(false);
+
+    const form = useForm();
+    const [filename, setFilename] = useState('');
+    const [description, setDescription] = useState('');
+    const [fileExtension, setFileExtension] = useState('');
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+    const [isDialogOpen, setIsDialogOpen] = useState(false); // outer Data Table
+    const [isAddDialogOpen, setIsAddDialogOpen] = useState(false); // inner Add Data ✅
 
     // New state to track active layers (layers currently in Layer Controls)
     const [activeLayers, setActiveLayers] = useState<Layer[]>([]);
@@ -271,6 +282,31 @@ export function FloatingDock({ setPropsLayers }) {
         } finally {
             setUploadLoading(false);
             fetchGeoserverLayers();
+        }
+    };
+
+    const handleSubmitForm = async (e: any) => {
+        const formData = new FormData();
+        formData.append('name', e.name || '');
+        formData.append('description', e.description || '');
+
+        if (selectedFile) {
+            formData.append('file', selectedFile); // ✅ real File object
+        } else {
+            console.error('No file selected!');
+            return;
+        }
+
+        try {
+            const response = await axios.post('/map/add-data', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
+                },
+            });
+            console.log('Add Data Successfully!', response.data);
+        } catch (error) {
+            console.error(error);
         }
     };
 
@@ -474,94 +510,162 @@ export function FloatingDock({ setPropsLayers }) {
 
                     if (item.type === 'data') {
                         return (
-                            <Dialog key={item.label}>
-                                <DialogTrigger asChild>
-                                    <button
-                                        className="group relative"
-                                        onMouseEnter={() => setHoveredIndex(index)}
-                                        onMouseLeave={() => setHoveredIndex(null)}
-                                    >
-                                        <div
-                                            className={`flex items-center justify-center rounded-xl border border-slate-200/50 bg-gradient-to-br from-slate-50 to-slate-100 shadow-sm transition-all duration-300 ease-out ${
-                                                isHovered
-                                                    ? 'h-16 w-16 -translate-y-4 border-emerald-200 shadow-xl'
-                                                    : isAdjacent
-                                                      ? 'h-12 w-12 -translate-y-1'
-                                                      : 'h-10 w-10'
-                                            } hover:bg-gradient-to-br hover:from-emerald-50 hover:to-amber-50`}
+                            <>
+                                <Dialog key={item.label} open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                    <DialogTrigger asChild>
+                                        <button
+                                            className="group relative"
+                                            onMouseEnter={() => setHoveredIndex(index)}
+                                            onMouseLeave={() => setHoveredIndex(null)}
                                         >
-                                            <Icon
-                                                className={`text-slate-600 transition-all duration-300 ${item.color} ${
-                                                    isHovered ? 'h-8 w-8' : isAdjacent ? 'h-6 w-6' : 'h-5 w-5'
-                                                }`}
-                                            />
+                                            <div
+                                                className={`flex items-center justify-center rounded-xl border border-slate-200/50 bg-gradient-to-br from-slate-50 to-slate-100 shadow-sm transition-all duration-300 ease-out ${
+                                                    isHovered
+                                                        ? 'h-16 w-16 -translate-y-4 border-emerald-200 shadow-xl'
+                                                        : isAdjacent
+                                                          ? 'h-12 w-12 -translate-y-1'
+                                                          : 'h-10 w-10'
+                                                } hover:bg-gradient-to-br hover:from-emerald-50 hover:to-amber-50`}
+                                            >
+                                                <Icon
+                                                    className={`text-slate-600 transition-all duration-300 ${item.color} ${
+                                                        isHovered ? 'h-8 w-8' : isAdjacent ? 'h-6 w-6' : 'h-5 w-5'
+                                                    }`}
+                                                />
+                                            </div>
+
+                                            {/* Tooltip */}
+                                            <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded-md bg-slate-900 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                                                {item.label}
+                                                <div className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-2 border-r-2 border-l-2 border-transparent border-t-slate-900"></div>
+                                            </div>
+                                        </button>
+                                    </DialogTrigger>
+
+                                    <DialogContent className="h-[80vh] w-[150vh] !max-w-none rounded-lg bg-white">
+                                        <DialogHeader>
+                                            <DialogTitle className="flex items-center gap-2 text-lg text-emerald-700">
+                                                <Database className="h-5 w-5" /> Data Table
+                                            </DialogTitle>
+                                        </DialogHeader>
+
+                                        {/* Search + Add Row */}
+                                        <div className="flex items-center justify-between" style={{ marginTop: '-20vh' }}>
+                                            {/* Search bar */}
+                                            <div className="relative w-1/3">
+                                                <Search className="absolute top-2.5 left-2 h-4 w-4 text-gray-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search..."
+                                                    className="w-full rounded-md border border-gray-300 py-2 pr-3 pl-8 text-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                                />
+                                            </div>
+
+                                            {/* Button that triggers Add Data dialog */}
+                                            <Button
+                                                className="cursor-pointer bg-emerald-600 text-white"
+                                                onClick={() => setIsAddDialogOpen(true)} // ✅ trigger outside dialog
+                                            >
+                                                <Plus className="h-4 w-4" /> Add Data
+                                            </Button>
                                         </div>
 
-                                        {/* Tooltip */}
-                                        <div
-                                            className={`pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded-md bg-slate-900 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100`}
-                                        >
-                                            {item.label}
-                                            <div className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-2 border-r-2 border-l-2 border-transparent border-t-slate-900"></div>
-                                        </div>
-                                    </button>
-                                </DialogTrigger>
-
-                                <DialogContent className="h-[80vh] w-[150vh] !max-w-none rounded-lg bg-white ">
-                                    {/* Title only */}
-                                    <DialogHeader className="">
-                                        <DialogTitle className="flex items-center gap-2 text-lg text-emerald-700">
-                                            <Database className="h-5 w-5" /> Data Table
-                                        </DialogTitle>
-                                    </DialogHeader>
-
-                                    {/* Search + Add Row */}
-                                    <div className=" flex items-center justify-between" style={{marginTop:"-20vh"}}>
-                                        {/* Search bar */}
-                                        <div className="relative w-1/3">
-                                            <Search className="absolute top-2.5 left-2 h-4 w-4 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                placeholder="Search..."
-                                                className="w-full rounded-md border border-gray-300 py-2 pr-3 pl-8 text-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                            />
-                                        </div>
-
-                                        {/* Add button */}
-                                        <Button className="flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
-                                            <Plus className="h-4 w-4" /> Add Data
-                                        </Button>
-                                    </div>
-
-                                    {/* Scrollable table wrapper */}
-                                    <div className="max-h-[65vh] overflow-auto rounded-sm border -mt-25">
-                                        <Table className='border-b-1'>
-                                            <TableHeader className="sticky top-0  bg-white shadow-sm">
-                                                <TableRow>
-                                                    <TableHead>Filename</TableHead>
-                                                    <TableHead>Description</TableHead>
-                                                    <TableHead className="w-[100px]">File extension</TableHead>
-                                                    <TableHead className="w-[150px] text-right">Action</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {invoices.map((invoice) => (
-                                                    <TableRow key={invoice.invoice}>
-                                                        <TableCell className="font-medium">{invoice.invoice}</TableCell>
-                                                        <TableCell>{invoice.paymentStatus}</TableCell>
-                                                        <TableCell>{invoice.paymentMethod}</TableCell>
-                                                        <TableCell className="text-right">
-                                                            <Button variant="ghost">
-                                                                <MdFileDownload />
-                                                            </Button>
-                                                        </TableCell>
+                                        {/* Scrollable table wrapper */}
+                                        <div className="-mt-25 max-h-[65vh] overflow-auto rounded-sm border">
+                                            <Table className="border-b-1">
+                                                <TableHeader className="sticky top-0 bg-white shadow-sm">
+                                                    <TableRow>
+                                                        <TableHead className='w-[200px]'>Name</TableHead>
+                                                        <TableHead>Description</TableHead>
+                                                        <TableHead className="w-[150px]">Filename</TableHead>
+                                                        <TableHead className="w-[100px]">File extension</TableHead>
+                                                        <TableHead className="w-[100px]">Size</TableHead>
+                                                        <TableHead className="w-[100px] text-right">Action</TableHead>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                </DialogContent>
-                            </Dialog>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {invoices.map((invoice) => (
+                                                        <TableRow key={invoice.invoice}>
+                                                            <TableCell className="font-medium">{invoice.invoice}</TableCell>
+                                                            <TableCell>{invoice.paymentStatus}</TableCell>
+                                                            <TableCell>{invoice.paymentMethod}</TableCell>
+                                                            <TableCell>{invoice.paymentMethod}</TableCell>
+                                                            <TableCell>{invoice.paymentMethod}</TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Button variant="ghost" className='cursor-pointer'>
+                                                                    <MdFileDownload />
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </DialogContent>
+                                </Dialog>
+                                {/* INNER ADD DATA DIALOG (moved OUTSIDE) ✅ */}
+                                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                                    <DialogContent className="bg-white shadow-lg sm:max-w-[425px]">
+                                        <DialogHeader>
+                                            <DialogTitle className="my-2">Add New Data</DialogTitle>
+                                        </DialogHeader>
+
+                                        <Form {...form}>
+                                            <form onSubmit={form.handleSubmit(handleSubmitForm)}>
+                                                <FormField
+                                                    control={form.control}
+                                                    name="name"
+                                                    render={({ field }) => (
+                                                        <FormItem className="my-2">
+                                                            <FormLabel>Filename</FormLabel>
+                                                            <FormControl>
+                                                                <Input placeholder="Filename" type="text" {...field} />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={form.control}
+                                                    name="description"
+                                                    render={({ field }) => (
+                                                        <FormItem className="my-2">
+                                                            <FormLabel>Description</FormLabel>
+                                                            <FormControl>
+                                                                <Input placeholder="Description" type="text" {...field} />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={form.control}
+                                                    name="file"
+                                                    render={({ field: { onChange, ...rest } }) => (
+                                                        <FormItem className="my-2">
+                                                            <FormLabel>Upload File</FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    type="file"
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files?.[0] || null;
+                                                                        setSelectedFile(file);
+                                                                    }}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+
+                                                <Button variant="secondary" className="bg-black text-white" type="submit">
+                                                    Submit
+                                                </Button>
+                                            </form>
+                                        </Form>
+                                    </DialogContent>
+                                </Dialog>
+                            </>
                         );
                     }
 
