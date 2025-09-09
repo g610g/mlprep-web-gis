@@ -6,8 +6,9 @@ import { ArrowRight, MapPin, MapPinned, Play } from 'lucide-react';
 
 import { Head, Link } from '@inertiajs/react';
 import { Avatar, AvatarImage } from '@radix-ui/react-avatar';
-import Map from '../../src/images/gis_sample.png';
+import Map from '../../src/images/gis.png';
 import Logo from '../../src/images/mlprep.png';
+
 export default function HomePage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50">

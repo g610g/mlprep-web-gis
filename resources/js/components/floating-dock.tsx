@@ -1,9 +1,27 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
-import { AlignJustify, BarChart3, Database, Eye, EyeOff, Globe, Home, Layers, LayersIcon, Map, Plus, Settings, Trash2, User } from 'lucide-react';
+import {
+    AlignJustify,
+    BarChart3,
+    Database,
+    Eye,
+    EyeOff,
+    Globe,
+    Home,
+    Layers,
+    LayersIcon,
+    Map,
+    Plus,
+    Search,
+    Settings,
+    Trash2,
+    User,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { MdFileDownload } from 'react-icons/md';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
@@ -23,13 +41,62 @@ const dockItems = [
     { icon: Home, label: 'Home', href: '/', color: 'hover:text-emerald-600', type: 'link' as const },
     { icon: Map, label: 'Map', href: '/map', color: 'hover:text-blue-600', type: 'link' as const },
     { icon: BarChart3, label: 'Analytics', href: '/analytics', color: 'hover:text-amber-600', type: 'link' as const },
-    { icon: Database, label: 'Data', href: '/data', color: 'hover:text-purple-600', type: 'link' as const },
+    { icon: Database, label: 'Data', href: '/data', color: 'hover:text-purple-600', type: 'data' as const },
     { icon: Layers, label: 'Layers', color: 'hover:text-teal-600', type: 'layer' as const },
     { icon: Globe, label: 'Global', href: '/global', color: 'hover:text-indigo-600', type: 'link' as const },
     { icon: User, label: 'Profile', href: '/profile', color: 'hover:text-rose-600', type: 'link' as const },
     { icon: Settings, label: 'Settings', href: '/settings', color: 'hover:text-slate-600', type: 'link' as const },
 ];
-
+const invoices = [
+    {
+        invoice: 'INV001',
+        paymentStatus: 'Paid',
+        totalAmount: '$250.00',
+        paymentMethod: 'Credit Card',
+    },
+    {
+        invoice: 'INV002',
+        paymentStatus: 'Pending',
+        totalAmount: '$150.00',
+        paymentMethod: 'PayPal',
+    },
+    {
+        invoice: 'INV003',
+        paymentStatus: 'Unpaid',
+        totalAmount: '$350.00',
+        paymentMethod: 'Bank Transfer',
+    },
+    {
+        invoice: 'INV004',
+        paymentStatus: 'Paid',
+        totalAmount: '$450.00',
+        paymentMethod: 'Credit Card',
+    },
+    {
+        invoice: 'INV005',
+        paymentStatus: 'Paid',
+        totalAmount: '$550.00',
+        paymentMethod: 'PayPal',
+    },
+    {
+        invoice: 'INV006',
+        paymentStatus: 'Pending',
+        totalAmount: '$200.00',
+        paymentMethod: 'Bank Transfer',
+    },
+    {
+        invoice: 'INV007',
+        paymentStatus: 'Unpaid',
+        totalAmount: '$300.00',
+        paymentMethod: 'Credit Card',
+    },
+    {
+        invoice: 'INV007',
+        paymentStatus: 'Unpaid',
+        totalAmount: '$300.00',
+        paymentMethod: 'Credit Card',
+    },
+];
 export function FloatingDock({ setPropsLayers }) {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -149,11 +216,6 @@ export function FloatingDock({ setPropsLayers }) {
         }
     };
 
-    const addLayer = async (e: any) => {
-        e.preventDefault();
-        console.log('Add Layer Button Clicked!');
-    };
-
     const fetchGeoserverLayers = async () => {
         console.log('Layers Rendered!');
         try {
@@ -212,10 +274,6 @@ export function FloatingDock({ setPropsLayers }) {
         }
     };
 
-    const handleFileChange = (e: any) => {
-        setUploadShape(e.target.files[0]);
-    };
-
     return (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 transform" style={{ zIndex: 1001 }}>
             <div className="flex items-end gap-2 px-4 py-3">
@@ -272,7 +330,7 @@ export function FloatingDock({ setPropsLayers }) {
                                         </SheetTitle>
                                     </SheetHeader>
                                     <div className="">
-                                        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                        <Dialog modal={false} open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                                             <DialogTrigger
                                                 className="mx-4 size-8 w-90 rounded-sm bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700"
                                                 onClick={() => setIsDialogOpen(true)}
@@ -411,6 +469,99 @@ export function FloatingDock({ setPropsLayers }) {
                                     </div>
                                 </SheetContent>
                             </Sheet>
+                        );
+                    }
+
+                    if (item.type === 'data') {
+                        return (
+                            <Dialog key={item.label}>
+                                <DialogTrigger asChild>
+                                    <button
+                                        className="group relative"
+                                        onMouseEnter={() => setHoveredIndex(index)}
+                                        onMouseLeave={() => setHoveredIndex(null)}
+                                    >
+                                        <div
+                                            className={`flex items-center justify-center rounded-xl border border-slate-200/50 bg-gradient-to-br from-slate-50 to-slate-100 shadow-sm transition-all duration-300 ease-out ${
+                                                isHovered
+                                                    ? 'h-16 w-16 -translate-y-4 border-emerald-200 shadow-xl'
+                                                    : isAdjacent
+                                                      ? 'h-12 w-12 -translate-y-1'
+                                                      : 'h-10 w-10'
+                                            } hover:bg-gradient-to-br hover:from-emerald-50 hover:to-amber-50`}
+                                        >
+                                            <Icon
+                                                className={`text-slate-600 transition-all duration-300 ${item.color} ${
+                                                    isHovered ? 'h-8 w-8' : isAdjacent ? 'h-6 w-6' : 'h-5 w-5'
+                                                }`}
+                                            />
+                                        </div>
+
+                                        {/* Tooltip */}
+                                        <div
+                                            className={`pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded-md bg-slate-900 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100`}
+                                        >
+                                            {item.label}
+                                            <div className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-2 border-r-2 border-l-2 border-transparent border-t-slate-900"></div>
+                                        </div>
+                                    </button>
+                                </DialogTrigger>
+
+                                <DialogContent className="h-[80vh] w-[150vh] !max-w-none rounded-lg bg-white ">
+                                    {/* Title only */}
+                                    <DialogHeader className="">
+                                        <DialogTitle className="flex items-center gap-2 text-lg text-emerald-700">
+                                            <Database className="h-5 w-5" /> Data Table
+                                        </DialogTitle>
+                                    </DialogHeader>
+
+                                    {/* Search + Add Row */}
+                                    <div className=" flex items-center justify-between" style={{marginTop:"-20vh"}}>
+                                        {/* Search bar */}
+                                        <div className="relative w-1/3">
+                                            <Search className="absolute top-2.5 left-2 h-4 w-4 text-gray-400" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search..."
+                                                className="w-full rounded-md border border-gray-300 py-2 pr-3 pl-8 text-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                            />
+                                        </div>
+
+                                        {/* Add button */}
+                                        <Button className="flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
+                                            <Plus className="h-4 w-4" /> Add Data
+                                        </Button>
+                                    </div>
+
+                                    {/* Scrollable table wrapper */}
+                                    <div className="max-h-[65vh] overflow-auto rounded-sm border -mt-25">
+                                        <Table className='border-b-1'>
+                                            <TableHeader className="sticky top-0  bg-white shadow-sm">
+                                                <TableRow>
+                                                    <TableHead>Filename</TableHead>
+                                                    <TableHead>Description</TableHead>
+                                                    <TableHead className="w-[100px]">File extension</TableHead>
+                                                    <TableHead className="w-[150px] text-right">Action</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {invoices.map((invoice) => (
+                                                    <TableRow key={invoice.invoice}>
+                                                        <TableCell className="font-medium">{invoice.invoice}</TableCell>
+                                                        <TableCell>{invoice.paymentStatus}</TableCell>
+                                                        <TableCell>{invoice.paymentMethod}</TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Button variant="ghost">
+                                                                <MdFileDownload />
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
                         );
                     }
 

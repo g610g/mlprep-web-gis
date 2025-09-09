@@ -3,7 +3,7 @@ import { Head } from '@inertiajs/react';
 import { Avatar, AvatarImage } from '@radix-ui/react-avatar';
 import L from 'leaflet';
 import { useEffect, useState } from 'react';
-import { GeoJSON, MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { GeoJSON, MapContainer, Marker, Popup, TileLayer, WMSTileLayer } from 'react-leaflet';
 import Compass from '../../src/images/compass.png';
 import Logo from '../../src/images/mlprep.png';
 
@@ -50,6 +50,19 @@ const MapComponent = () => {
                 <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
                 {/* Dynamic GeoServer WMS layers (polygons, rasterized) */}
+                {propsLayers
+                    .filter((layer) => layer.visible && layer.type === 'RASTER')
+                    .map((layer) => (
+                        <WMSTileLayer
+                            key={layer.name}
+                            url="http://127.0.0.1:8080/geoserver/wms"
+                            layers={`mlprep:${layer.name}`} // workspace:layername
+                            format="image/png"
+                            transparent={true}
+                        />
+                        
+                    ))}
+
                 {propsLayers
                     .filter((layer) => layer.visible && layer.type === 'VECTOR' && layer.geojson)
                     .map((layer) => (
