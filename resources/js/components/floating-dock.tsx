@@ -1,12 +1,13 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
 import {
+    AlertCircleIcon,
     AlignJustify,
     BarChart3,
+    CheckCircle2Icon,
     Database,
     Eye,
     EyeOff,
@@ -24,6 +25,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { MdFileDownload } from 'react-icons/md';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { Badge } from './ui/badge';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from './ui/form';
 import { Input } from './ui/input';
@@ -44,7 +46,7 @@ const dockItems = [
     { icon: Home, label: 'Home', href: '/', color: 'hover:text-emerald-600', type: 'link' as const },
     { icon: Map, label: 'Map', href: '/map', color: 'hover:text-blue-600', type: 'link' as const },
     { icon: BarChart3, label: 'Analytics', href: '/analytics', color: 'hover:text-amber-600', type: 'link' as const },
-    { icon: Database, label: 'Data', href: '/data', color: 'hover:text-purple-600', type: 'data' as const },
+    { icon: Database, label: 'Data', href: '/data', color: 'hover:text-purple-600', type: 'link' as const },
     { icon: Layers, label: 'Layers', color: 'hover:text-teal-600', type: 'layer' as const },
     { icon: Globe, label: 'Global', href: '/global', color: 'hover:text-indigo-600', type: 'link' as const },
     { icon: User, label: 'Profile', href: '/profile', color: 'hover:text-rose-600', type: 'link' as const },
@@ -108,6 +110,7 @@ export function FloatingDock({ setPropsLayers }) {
     const [fetchedLayers, setFetchedLayers] = useState<any[]>([]);
     const [uploadShape, setUploadShape] = useState(null);
     const [uploadLoading, setUploadLoading] = useState(false);
+    const [fetchedData, setFetchedData] = useState([]);
 
     const form = useForm();
     const [filename, setFilename] = useState('');
@@ -117,6 +120,11 @@ export function FloatingDock({ setPropsLayers }) {
 
     const [isDialogOpen, setIsDialogOpen] = useState(false); // outer Data Table
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false); // inner Add Data ✅
+    const [isDataDialogOpen, setIsDataDialogOpen] = useState(false); // for Data Table
+    const [isAddLayerDialogOpen, setIsAddLayerDialogOpen] = useState(false); // for Add Layer
+
+    const [successMessage, setSuccessMessage] = useState('');
+    const [errorMessage, setErrorMessage] = useState('');
 
     // New state to track active layers (layers currently in Layer Controls)
     const [activeLayers, setActiveLayers] = useState<Layer[]>([]);
@@ -214,6 +222,16 @@ export function FloatingDock({ setPropsLayers }) {
         }
     }, [geoLayers]);
 
+    useEffect(() => {
+        const fetchData = async () => {
+            const response = await axios.get('http://127.0.0.1:8000/map/data');
+            console.log(response);
+            setFetchedData(response.data);
+        };
+        fetchData();
+        console.log(fetchedData);
+    }, []);
+
     const getLayerTypeColor = (type: Layer['type']) => {
         switch (type) {
             case 'VECTOR':
@@ -304,10 +322,39 @@ export function FloatingDock({ setPropsLayers }) {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
                 },
             });
+            setErrorMessage('');
+            setSuccessMessage('Add Data Successfully!');
+
             console.log('Add Data Successfully!', response.data);
+
+            setTimeout(() => {
+                setIsAddDialogOpen(false);
+                setSuccessMessage('');
+            }, 3000);
         } catch (error) {
+            setErrorMessage(error.response.data.message);
             console.error(error);
         }
+    };
+
+    const handleDownload = async (e:any) => {
+        await axios.post('/map/download', { id:e }, { responseType: 'blob' }).then((res) => {
+            // get filename from Content-Disposition header
+            const disposition = res.headers['content-disposition'];
+            let filename = 'downloaded-file';
+
+            if (disposition && disposition.includes('filename=')) {
+                filename = disposition.split('filename=')[1].replace(/"/g, '');
+            }
+
+            // create blob and trigger download
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+        });
     };
 
     return (
@@ -317,10 +364,9 @@ export function FloatingDock({ setPropsLayers }) {
                     const Icon = item.icon;
                     const isHovered = hoveredIndex === index;
                     const isAdjacent = hoveredIndex !== null && Math.abs(hoveredIndex - index) === 1;
-
-                    if (item.type === 'layer') {
+                    if (item.label === 'Layers') {
                         return (
-                            <Sheet key={item.label} open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+                            <Sheet modal={false} key={item.label} open={isSheetOpen} onOpenChange={setIsSheetOpen}>
                                 <SheetTrigger asChild>
                                     <button
                                         className="group relative"
@@ -366,10 +412,10 @@ export function FloatingDock({ setPropsLayers }) {
                                         </SheetTitle>
                                     </SheetHeader>
                                     <div className="">
-                                        <Dialog modal={false} open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                        <Dialog modal={false} open={isAddLayerDialogOpen} onOpenChange={setIsAddLayerDialogOpen}>
                                             <DialogTrigger
                                                 className="mx-4 size-8 w-90 rounded-sm bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700"
-                                                onClick={() => setIsDialogOpen(true)}
+                                                onClick={() => setIsAddLayerDialogOpen(true)}
                                             >
                                                 Add Layer
                                             </DialogTrigger>
@@ -508,15 +554,16 @@ export function FloatingDock({ setPropsLayers }) {
                         );
                     }
 
-                    if (item.type === 'data') {
+                    if (item.label === 'Data') {
                         return (
                             <>
-                                <Dialog key={item.label} open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                <Dialog key={item.label} open={isDataDialogOpen} onOpenChange={setIsDataDialogOpen}>
                                     <DialogTrigger asChild>
                                         <button
                                             className="group relative"
                                             onMouseEnter={() => setHoveredIndex(index)}
                                             onMouseLeave={() => setHoveredIndex(null)}
+                                            title={item.label}
                                         >
                                             <div
                                                 className={`flex items-center justify-center rounded-xl border border-slate-200/50 bg-gradient-to-br from-slate-50 to-slate-100 shadow-sm transition-all duration-300 ease-out ${
@@ -533,24 +580,17 @@ export function FloatingDock({ setPropsLayers }) {
                                                     }`}
                                                 />
                                             </div>
-
-                                            {/* Tooltip */}
-                                            <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded-md bg-slate-900 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                                                {item.label}
-                                                <div className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-2 border-r-2 border-l-2 border-transparent border-t-slate-900"></div>
-                                            </div>
                                         </button>
                                     </DialogTrigger>
 
-                                    <DialogContent className="h-[80vh] w-[150vh] !max-w-none rounded-lg bg-white">
+                                    <DialogContent className="h-[80vh] w-[155vh] !max-w-none rounded-lg bg-white">
                                         <DialogHeader>
-                                            <DialogTitle className="flex items-center gap-2 text-lg text-emerald-700">
+                                            <DialogTitle className="flex items-center gap-2 p-0 text-lg text-emerald-700">
                                                 <Database className="h-5 w-5" /> Data Table
                                             </DialogTitle>
                                         </DialogHeader>
 
-                                        {/* Search + Add Row */}
-                                        <div className="flex items-center justify-between" style={{ marginTop: '-20vh' }}>
+                                        <div className="my-0 flex items-center justify-between">
                                             {/* Search bar */}
                                             <div className="relative w-1/3">
                                                 <Search className="absolute top-2.5 left-2 h-4 w-4 text-gray-400" />
@@ -562,48 +602,53 @@ export function FloatingDock({ setPropsLayers }) {
                                             </div>
 
                                             {/* Button that triggers Add Data dialog */}
-                                            <Button
-                                                className="cursor-pointer bg-emerald-600 text-white"
-                                                onClick={() => setIsAddDialogOpen(true)} // ✅ trigger outside dialog
-                                            >
+                                            <Button className="cursor-pointer bg-emerald-600 text-white" onClick={() => setIsAddDialogOpen(true)}>
                                                 <Plus className="h-4 w-4" /> Add Data
                                             </Button>
                                         </div>
 
-                                        {/* Scrollable table wrapper */}
-                                        <div className="-mt-25 max-h-[65vh] overflow-auto rounded-sm border">
-                                            <Table className="border-b-1">
-                                                <TableHeader className="sticky top-0 bg-white shadow-sm">
-                                                    <TableRow>
-                                                        <TableHead className='w-[200px]'>Name</TableHead>
-                                                        <TableHead>Description</TableHead>
-                                                        <TableHead className="w-[150px]">Filename</TableHead>
-                                                        <TableHead className="w-[100px]">File extension</TableHead>
-                                                        <TableHead className="w-[100px]">Size</TableHead>
-                                                        <TableHead className="w-[100px] text-right">Action</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {invoices.map((invoice) => (
-                                                        <TableRow key={invoice.invoice}>
-                                                            <TableCell className="font-medium">{invoice.invoice}</TableCell>
-                                                            <TableCell>{invoice.paymentStatus}</TableCell>
-                                                            <TableCell>{invoice.paymentMethod}</TableCell>
-                                                            <TableCell>{invoice.paymentMethod}</TableCell>
-                                                            <TableCell>{invoice.paymentMethod}</TableCell>
-                                                            <TableCell className="text-right">
-                                                                <Button variant="ghost" className='cursor-pointer'>
+                                        <div className="h-[500px] overflow-y-auto rounded-md border">
+                                            <table className="w-full border-collapse">
+                                                <thead className="sticky top-0 z-10 bg-white shadow-sm">
+                                                    <tr>
+                                                        <th className="w-[200px] px-4 text-left">Date</th>
+                                                        <th className="w-[200px] px-4 text-left">Name</th>
+                                                        <th className="px-4 text-left">Description</th>
+                                                        <th className="w-[150px] px-4 text-left">Filename</th>
+                                                        <th className="w-[100px] px-4 text-left">File extension</th>
+                                                        <th className="w-[100px] px-4 text-left">Size</th>
+                                                        <th className="w-[100px] px-4 text-right">Action</th>
+                                                    </tr>
+                                                </thead>
+
+                                                <tbody>
+                                                    {fetchedData.map((data) => (
+                                                        <tr key={data.id} className="border-t">
+                                                            <td className="px-4">{new Date(data.created_at).toISOString().split('T')[0]}</td>
+                                                            <td className="px-4">{data.name}</td>
+                                                            <td className="px-4">{data.description}</td>
+                                                            <td className="max-w-[150px] truncate overflow-hidden px-4 whitespace-nowrap">
+                                                                {data.filename.split('.').slice(0, -1).join('.')}
+                                                            </td>
+                                                            <td className="px-4">{data.file_extension}</td>
+                                                            <td className="px-4">{(data.size / (1024 * 1024)).toFixed(2)} MB</td>
+                                                            <td className="px-4 text-right">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    className="cursor-pointer"
+                                                                    onClick={(e) => handleDownload(data.id)}
+                                                                >
                                                                     <MdFileDownload />
                                                                 </Button>
-                                                            </TableCell>
-                                                        </TableRow>
+                                                            </td>
+                                                        </tr>
                                                     ))}
-                                                </TableBody>
-                                            </Table>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </DialogContent>
                                 </Dialog>
-                                {/* INNER ADD DATA DIALOG (moved OUTSIDE) ✅ */}
+
                                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                                     <DialogContent className="bg-white shadow-lg sm:max-w-[425px]">
                                         <DialogHeader>
@@ -617,9 +662,9 @@ export function FloatingDock({ setPropsLayers }) {
                                                     name="name"
                                                     render={({ field }) => (
                                                         <FormItem className="my-2">
-                                                            <FormLabel>Filename</FormLabel>
+                                                            <FormLabel>Name</FormLabel>
                                                             <FormControl>
-                                                                <Input placeholder="Filename" type="text" {...field} />
+                                                                <Input placeholder="Name" type="text" {...field} />
                                                             </FormControl>
                                                             <FormMessage />
                                                         </FormItem>
@@ -657,10 +702,26 @@ export function FloatingDock({ setPropsLayers }) {
                                                         </FormItem>
                                                     )}
                                                 />
+                                                {successMessage && (
+                                                    <Alert>
+                                                        <CheckCircle2Icon />
+                                                        <AlertTitle>{successMessage}</AlertTitle>
+                                                        <AlertDescription>Closing in 3 secs</AlertDescription>
+                                                    </Alert>
+                                                )}
+                                                {errorMessage && (
+                                                    <Alert variant="destructive">
+                                                        <AlertCircleIcon />
+                                                        <AlertTitle>Error occured!</AlertTitle>
+                                                        <AlertDescription>{errorMessage}</AlertDescription>
+                                                    </Alert>
+                                                )}
 
-                                                <Button variant="secondary" className="bg-black text-white" type="submit">
-                                                    Submit
-                                                </Button>
+                                                <div className="flex justify-end">
+                                                    <Button variant="secondary" className="my-2 bg-black text-white" type="submit">
+                                                        Submit
+                                                    </Button>
+                                                </div>
                                             </form>
                                         </Form>
                                     </DialogContent>

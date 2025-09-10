@@ -25,6 +25,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::post('/map/add-data', [DataController::class, 'store']);
+Route::get('/map/data', [DataController::class, 'fetch']);
+Route::post('/map/download', [DataController::class, 'download']);
 
 Route::prefix('geoserver')->group(function () {
     
