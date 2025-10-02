@@ -36,10 +36,10 @@ class DataController extends Controller
     }
 
 
-    public function fetch(){
-        $data = Data::all();
-        return response()->json($data, 200);
-    }
+    public function fetch() {
+    return response()->json(Data::orderByDesc('created_at')->get(), 200);
+}
+
 
     public function download(Request $request)
     {

@@ -3,6 +3,7 @@
 use App\Http\Controllers\GeoServer;
 use App\Http\Controllers\UploadShapeFileToGeoserver;
 use App\Http\Controllers\DataController;
+use App\Http\Controllers\AnalyticController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -27,6 +28,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 Route::post('/map/add-data', [DataController::class, 'store']);
 Route::get('/map/data', [DataController::class, 'fetch']);
 Route::post('/map/download', [DataController::class, 'download']);
+Route::post('/map/upload-gpkg', [AnalyticController::class, 'upload']);
 
 Route::prefix('geoserver')->group(function () {
     

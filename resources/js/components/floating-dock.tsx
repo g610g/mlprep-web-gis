@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -24,12 +24,15 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { MdFileDownload } from 'react-icons/md';
+import { MdAnalytics, MdFileDownload } from 'react-icons/md';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { Badge } from './ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from './ui/form';
 import { Input } from './ui/input';
+import { Label } from './ui/label';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 interface FloatingDockProps {
     setPropsLayers: React.Dispatch<React.SetStateAction<LayerData[]>>;
@@ -126,8 +129,28 @@ export function FloatingDock({ setPropsLayers }) {
     const [successMessage, setSuccessMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
 
+    const [file, setFile] = useState(null);
+    const [columns, setColumns] = useState([]);
+
+    const [uploadedData, setUploadedData] = useState<any | null>(null);
+    const [analyticDialog, setAnalyticDialog] = useState(true);
+    const [uploadedDataDialog, setUploadedDataDialog] = useState(false);
+
     // New state to track active layers (layers currently in Layer Controls)
     const [activeLayers, setActiveLayers] = useState<Layer[]>([]);
+
+    // Add state for search query
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Create filtered data based on searchQuery
+    const filteredData = fetchedData.filter((row: any) => {
+        const q = (searchQuery ?? '').toLowerCase();
+        const name = (row?.name ?? '').toLowerCase();
+        const desc = (row?.description ?? '').toLowerCase();
+        const filename = (row?.filename ?? '').toLowerCase();
+        const ext = (row?.file_extension ?? '').toLowerCase();
+        return name.includes(q) || desc.includes(q) || filename.includes(q) || ext.includes(q);
+    });
 
     const toggleLayerVisibility = (layerId: string) => {
         const updated = activeLayers.map((layer) => (layer.id === layerId ? { ...layer, visible: !layer.visible } : layer));
@@ -337,8 +360,8 @@ export function FloatingDock({ setPropsLayers }) {
         }
     };
 
-    const handleDownload = async (e:any) => {
-        await axios.post('/map/download', { id:e }, { responseType: 'blob' }).then((res) => {
+    const handleDownload = async (e: any) => {
+        await axios.post('/map/download', { id: e }, { responseType: 'blob' }).then((res) => {
             // get filename from Content-Disposition header
             const disposition = res.headers['content-disposition'];
             let filename = 'downloaded-file';
@@ -355,6 +378,32 @@ export function FloatingDock({ setPropsLayers }) {
             document.body.appendChild(link);
             link.click();
         });
+    };
+
+    const handleFileChange = (e: any) => {
+        setFile(e.target.files[0]);
+    };
+
+    const handleUpload = async (e: any) => {
+        e.preventDefault();
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('gpkg', file);
+
+        try {
+            const res = await axios.post('/map/upload-gpkg', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
+            });
+            console.log(res.data.tables[0].columns);
+            setUploadedData(res.data.tables[0].columns);
+            setUploadedDataDialog(true);
+            setAnalyticDialog(false);
+            // setColumns(res.data.columns);
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     return (
@@ -580,6 +629,12 @@ export function FloatingDock({ setPropsLayers }) {
                                                     }`}
                                                 />
                                             </div>
+                                            <div
+                                                className={`pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded-md bg-slate-900 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100`}
+                                            >
+                                                {item.label}
+                                                <div className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-2 border-r-2 border-l-2 border-transparent border-t-slate-900"></div>
+                                            </div>
                                         </button>
                                     </DialogTrigger>
 
@@ -598,6 +653,8 @@ export function FloatingDock({ setPropsLayers }) {
                                                     type="text"
                                                     placeholder="Search..."
                                                     className="w-full rounded-md border border-gray-300 py-2 pr-3 pl-8 text-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
                                                 />
                                             </div>
 
@@ -622,27 +679,50 @@ export function FloatingDock({ setPropsLayers }) {
                                                 </thead>
 
                                                 <tbody>
-                                                    {fetchedData.map((data) => (
-                                                        <tr key={data.id} className="border-t">
-                                                            <td className="px-4">{new Date(data.created_at).toISOString().split('T')[0]}</td>
-                                                            <td className="px-4">{data.name}</td>
-                                                            <td className="px-4">{data.description}</td>
-                                                            <td className="max-w-[150px] truncate overflow-hidden px-4 whitespace-nowrap">
-                                                                {data.filename.split('.').slice(0, -1).join('.')}
-                                                            </td>
-                                                            <td className="px-4">{data.file_extension}</td>
-                                                            <td className="px-4">{(data.size / (1024 * 1024)).toFixed(2)} MB</td>
-                                                            <td className="px-4 text-right">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    className="cursor-pointer"
-                                                                    onClick={(e) => handleDownload(data.id)}
-                                                                >
-                                                                    <MdFileDownload />
-                                                                </Button>
+                                                    {filteredData.length > 0 ? (
+                                                        filteredData.map((row: any) => {
+                                                            const createdAt = row?.created_at ? new Date(row.created_at) : null;
+                                                            const dateStr =
+                                                                createdAt && !isNaN(+createdAt) ? createdAt.toISOString().split('T')[0] : '-';
+
+                                                            const baseName = row?.filename ? row.filename.split('.').slice(0, -1).join('.') : '-';
+
+                                                            return (
+                                                                <tr key={row.id} className="border-t">
+                                                                    <td className="px-4">
+                                                                        {row?.created_at ? new Date(row.created_at).toISOString().split('T')[0] : '-'}
+                                                                    </td>
+                                                                    <td className="px-4">{row?.name ?? '-'}</td>
+                                                                    <td className="px-4">{row?.description ?? '-'}</td>
+                                                                    <td className="max-w-[150px] truncate overflow-hidden px-4 whitespace-nowrap">
+                                                                        {row?.filename ? row.filename.split('.').slice(0, -1).join('.') : '-'}
+                                                                    </td>
+                                                                    <td className="px-4">{row?.file_extension ?? '-'}</td>
+                                                                    <td className="px-4">
+                                                                        {typeof row?.size === 'number'
+                                                                            ? (row.size / (1024 * 1024)).toFixed(2) + ' MB'
+                                                                            : '-'}
+                                                                    </td>
+
+                                                                    <td className="px-4 text-right">
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            className="cursor-pointer"
+                                                                            onClick={() => handleDownload(row.id)}
+                                                                        >
+                                                                            <MdFileDownload />
+                                                                        </Button>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan={7} className="py-4 text-center text-gray-500">
+                                                                No matching records found
                                                             </td>
                                                         </tr>
-                                                    ))}
+                                                    )}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -725,6 +805,184 @@ export function FloatingDock({ setPropsLayers }) {
                                             </form>
                                         </Form>
                                     </DialogContent>
+                                </Dialog>
+                            </>
+                        );
+                    }
+
+                    if (item.label === 'Analytics') {
+                        return (
+                            <>
+                                <Dialog>
+                                    <form>
+                                        <DialogTrigger asChild>
+                                            <button
+                                                className="group relative"
+                                                onMouseEnter={() => setHoveredIndex(index)}
+                                                onMouseLeave={() => setHoveredIndex(null)}
+                                                title={item.label}
+                                            >
+                                                <div
+                                                    className={`flex items-center justify-center rounded-xl border border-slate-200/50 bg-gradient-to-br from-slate-50 to-slate-100 shadow-sm transition-all duration-300 ease-out ${
+                                                        isHovered
+                                                            ? 'h-16 w-16 -translate-y-4 border-emerald-200 shadow-xl'
+                                                            : isAdjacent
+                                                              ? 'h-12 w-12 -translate-y-1'
+                                                              : 'h-10 w-10'
+                                                    } hover:bg-gradient-to-br hover:from-emerald-50 hover:to-amber-50`}
+                                                >
+                                                    <Icon
+                                                        className={`text-slate-600 transition-all duration-300 ${item.color} ${
+                                                            isHovered ? 'h-8 w-8' : isAdjacent ? 'h-6 w-6' : 'h-5 w-5'
+                                                        }`}
+                                                    />
+                                                </div>
+                                                <div
+                                                    className={`pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded-md bg-slate-900 px-2 py-1 text-xs whitespace-nowrap text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100`}
+                                                >
+                                                    {item.label}
+                                                    <div className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-2 border-r-2 border-l-2 border-transparent border-t-slate-900"></div>
+                                                </div>
+                                            </button>
+                                        </DialogTrigger>
+                                        {}
+                                        <DialogContent className="flex h-[80vh] w-[155vh] !max-w-none flex-col rounded-lg border border-slate-200 bg-slate-50/90 backdrop-blur-md">
+                                            {analyticDialog && (
+                                                <>
+                                                    <DialogHeader>
+                                                        <DialogTitle className="flex items-center gap-2 p-0 text-lg text-emerald-700">
+                                                            <MdAnalytics className="h-5 w-5" /> Analytics
+                                                        </DialogTitle>
+                                                    </DialogHeader>
+
+                                                    {/* This fills remaining space below header */}
+                                                    <div className="grid flex-1 grid-cols-1 gap-4 overflow-auto md:grid-cols-2">
+                                                        {/* First card with 1-column table */}
+                                                        <Card className="flex flex-col">
+                                                            <CardContent className="flex-1 px-4 py-0">
+                                                                <Table>
+                                                                    <TableHeader>
+                                                                        <TableRow>
+                                                                            <TableHead className="w-60">Name</TableHead>
+                                                                            <TableHead className="w-25">Filename</TableHead>
+                                                                            <TableHead className="w-15">Size</TableHead>
+                                                                        </TableRow>
+                                                                    </TableHeader>
+                                                                    <TableBody>
+                                                                        <TableRow>
+                                                                            <TableCell>roads</TableCell>
+                                                                            <TableCell>roads.gpkg</TableCell>
+                                                                            <TableCell>1.8GB</TableCell>
+                                                                        </TableRow>
+                                                                    </TableBody>
+                                                                </Table>
+                                                            </CardContent>
+                                                        </Card>
+
+                                                        {/* Second card (login form) */}
+                                                        <Card className="flex flex-col">
+                                                            <CardHeader>
+                                                                <CardTitle>Upload a File</CardTitle>
+                                                                <CardDescription>Choose a file to upload into the system</CardDescription>
+                                                            </CardHeader>
+
+                                                            <CardContent className="flex-1">
+                                                                <form className="flex h-full flex-col justify-between" onSubmit={handleUpload}>
+                                                                    <div className="flex flex-col gap-6">
+                                                                        {/* File input */}
+                                                                        <div className="grid gap-2">
+                                                                            <Label htmlFor="file">Select File</Label>
+                                                                            <Input
+                                                                                id="file"
+                                                                                type="file"
+                                                                                required
+                                                                                accept=".gpkg"
+                                                                                onChange={handleFileChange}
+                                                                            />
+                                                                        </div>
+
+                                                                        {/* Optional: Drag-and-drop styled area */}
+                                                                        <div className="text-muted-foreground flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm hover:border-emerald-400 hover:bg-slate-100/50">
+                                                                            <p>Drag & drop your file here, or click above to browse</p>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Action buttons */}
+                                                                    <div className="mt-6 flex justify-end gap-2">
+                                                                        <Button type="submit">Upload</Button>
+                                                                    </div>
+                                                                </form>
+                                                                {/* {columns.length > 0 && (
+                                                            <ul>
+                                                                {columns.map((col, i) => (
+                                                                    <li key={i}>{col}</li>
+                                                                ))}
+                                                            </ul>
+                                                        )} */}
+                                                            </CardContent>
+                                                        </Card>
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            {uploadedDataDialog && (
+                                                <>
+                                                    <DialogHeader>
+                                                        <DialogTitle className="flex items-center gap-2 p-0 text-lg text-emerald-700">
+                                                            <MdAnalytics className="h-5 w-5" /> Column Preview
+                                                        </DialogTitle>
+                                                    </DialogHeader>
+
+                                                    <div className="flex items-center justify-between pb-3">
+                                                        <Button
+                                                            variant="outline"
+                                                            onClick={() => {
+                                                                setUploadedDataDialog(false);
+                                                                setAnalyticDialog(true);
+                                                            }}
+                                                        >
+                                                            Back
+                                                        </Button>
+                                                        <div className="text-muted-foreground text-sm">
+                                                            {uploadedData?.length ?? 0} columns detected
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Pure shadcn Table */}
+                                                    <div className="flex-1 overflow-auto rounded-xl border">
+                                                        <Table>
+                                                            <TableHeader className="sticky top-0 bg-white">
+                                                                <TableRow>
+                                                                    <TableHead className="w-24">Index</TableHead>
+                                                                    <TableHead>Column name</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {Array.isArray(uploadedData) && uploadedData.length > 0 ? (
+                                                                    uploadedData.map((name: string, i: number) => (
+                                                                        <TableRow key={`${name}-${i}`}>
+                                                                            <TableCell className="text-muted-foreground font-mono text-sm">
+                                                                                {i}
+                                                                            </TableCell>
+                                                                            <TableCell className="font-mono">{name}</TableCell>
+                                                                        </TableRow>
+                                                                    ))
+                                                                ) : (
+                                                                    <TableRow>
+                                                                        <TableCell colSpan={2} className="text-muted-foreground text-center">
+                                                                            No columns found.
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                )}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                </>
+                                            )}
+
+                                            <DialogFooter />
+                                        </DialogContent>
+                                    </form>
                                 </Dialog>
                             </>
                         );

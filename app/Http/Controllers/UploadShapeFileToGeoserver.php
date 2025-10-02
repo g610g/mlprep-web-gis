@@ -53,6 +53,7 @@ class UploadShapeFileToGeoserver extends Controller
 
             Log::info("Upload successful with status: " . $response->getStatusCode());
 
+            
             // Return Inertia response instead of JSON
             return back()->with([
                 'success' => 'Shapefile uploaded successfully',
